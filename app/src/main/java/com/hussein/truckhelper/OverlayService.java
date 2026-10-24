@@ -1,4 +1,3 @@
-
 package com.hussein.truckhelper;
 
 import android.app.Service;
@@ -15,6 +14,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class OverlayService extends Service {
     private WindowManager wm;
@@ -28,6 +28,7 @@ public class OverlayService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+
         if (!Settings.canDrawOverlays(this)) {
             stopSelf();
             return;
@@ -71,9 +72,11 @@ public class OverlayService extends Service {
                 case MotionEvent.ACTION_MOVE:
                     int dx = (int) (event.getRawX() - downX);
                     int dy = (int) (event.getRawY() - downY);
+
                     if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5)) {
                         moved = true;
                     }
+
                     bubbleParams.x = startX + dx;
                     bubbleParams.y = startY + dy;
                     wm.updateViewLayout(bubble, bubbleParams);
@@ -108,10 +111,31 @@ public class OverlayService extends Service {
         box.addView(title);
 
         TextView status = new TextView(this);
-        status.setText("المساعد العائم يعمل — وضع تجريبي");
+        status.setText("المساعد العائم يعمل");
         status.setTextColor(Color.LTGRAY);
         status.setPadding(0, dp(12), 0, dp(12));
         box.addView(status);
+
+        Button test = new Button(this);
+        test.setText("اختبار اللمس");
+        test.setOnClickListener(v -> {
+            if (!GameAccessibilityService.isConnected()) {
+                Toast.makeText(
+                    this,
+                    "فعّل خدمة Truck Helper من إعدادات إمكانية الوصول أولاً",
+                    Toast.LENGTH_LONG
+                ).show();
+                return;
+            }
+
+            GameAccessibilityService.testTap();
+            Toast.makeText(
+                this,
+                "تم إرسال طلب لمسة إلى منتصف الشاشة",
+                Toast.LENGTH_SHORT
+            ).show();
+        });
+        box.addView(test);
 
         Button close = new Button(this);
         close.setText("إغلاق اللوحة");
@@ -137,7 +161,9 @@ public class OverlayService extends Service {
     }
 
     private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+        return (int) (
+            value * getResources().getDisplayMetrics().density + 0.5f
+        );
     }
 
     @Override
@@ -154,4 +180,3 @@ public class OverlayService extends Service {
         return null;
     }
 }
-  
