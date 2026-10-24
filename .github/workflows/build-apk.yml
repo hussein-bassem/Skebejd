@@ -28,8 +28,15 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Show project files
+        run: |
+          echo "=== Root files ==="
+          ls -la
+          echo "=== App files ==="
+          find app -maxdepth 5 -type f
+
       - name: Build APK
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
         if: success()
