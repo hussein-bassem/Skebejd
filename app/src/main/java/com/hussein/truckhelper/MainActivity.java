@@ -1,4 +1,3 @@
-
 package com.hussein.truckhelper;
 
 import android.app.Activity;
