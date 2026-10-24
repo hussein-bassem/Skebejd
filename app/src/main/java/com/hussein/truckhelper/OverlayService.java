@@ -1,109 +1,196 @@
 
 package com.hussein.truckhelper;
 
-import android.accessibilityservice.AccessibilityService;
-import android.accessibilityservice.GestureDescription;
-import android.graphics.Path;
-import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
+import android.app.Service;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.GradientDrawable;
+import android.os.IBinder;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
 
-public class GameAccessibilityService extends AccessibilityService {
-
-    private static GameAccessibilityService instance;
-    private static String screenText = "ما تم فحص الشاشة بعد";
+public class OverlayService extends Service {
+    private WindowManager wm;
+    private View bubble;
+    private View panel;
+    private WindowManager.LayoutParams bubbleParams;
+    private float downX, downY;
+    private int startX, startY;
+    private boolean moved;
+    private TextView scanResult;
 
     @Override
-    protected void onServiceConnected() {
-        super.onServiceConnected();
-        instance = this;
-    }
+    public void onCreate() {
+        super.onCreate();
 
-    @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (instance == null) return;
-        scanScreen();
-    }
-
-    private void scanScreen() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-
-        if (root == null) {
-            screenText = "اللعبة ما وفرت عناصر قابلة للقراءة";
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf();
             return;
         }
 
-        StringBuilder result = new StringBuilder();
-        readNodes(root, result, 0);
-        root.recycle();
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
 
-        screenText = result.length() == 0
-                ? "ما لكينا نصوص قابلة للقراءة"
-                : result.toString();
-    }
+        TextView icon = new TextView(this);
+        icon.setText("🚛");
+        icon.setTextSize(26);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTextColor(Color.WHITE);
 
-    private void readNodes(
-            AccessibilityNodeInfo node,
-            StringBuilder result,
-            int depth) {
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(Color.rgb(57, 73, 171));
+        circle.setStroke(3, Color.rgb(255, 193, 7));
+        icon.setBackground(circle);
 
-        if (node == null || depth > 15) return;
+        bubble = icon;
+        bubbleParams = new WindowManager.LayoutParams(
+            dp(62), dp(62),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        );
+        bubbleParams.gravity = Gravity.TOP | Gravity.START;
+        bubbleParams.x = dp(16);
+        bubbleParams.y = dp(220);
 
-        CharSequence text = node.getText();
-        CharSequence desc = node.getContentDescription();
+        bubble.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = event.getRawX();
+                    downY = event.getRawY();
+                    startX = bubbleParams.x;
+                    startY = bubbleParams.y;
+                    moved = false;
+                    return true;
 
-        if (text != null && text.length() > 0) {
-            result.append(text).append('\n');
-        }
+                case MotionEvent.ACTION_MOVE:
+                    int dx = (int) (event.getRawX() - downX);
+                    int dy = (int) (event.getRawY() - downY);
+                    if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5)) {
+                        moved = true;
+                    }
+                    bubbleParams.x = startX + dx;
+                    bubbleParams.y = startY + dy;
+                    wm.updateViewLayout(bubble, bubbleParams);
+                    return true;
 
-        if (desc != null && desc.length() > 0) {
-            result.append(desc).append('\n');
-        }
-
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) {
-                readNodes(child, result, depth + 1);
+                case MotionEvent.ACTION_UP:
+                    if (!moved) togglePanel();
+                    return true;
             }
+            return false;
+        });
+
+        wm.addView(bubble, bubbleParams);
+    }
+
+    private void togglePanel() {
+        if (panel != null) {
+            wm.removeView(panel);
+            panel = null;
+            scanResult = null;
+            return;
         }
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(10), dp(12), dp(10));
+        box.setBackgroundColor(Color.rgb(18, 24, 38));
+
+        TextView title = new TextView(this);
+        title.setText("Truck Helper 🚛");
+        title.setTextSize(20);
+        title.setTextColor(Color.WHITE);
+        box.addView(title);
+
+        TextView status = new TextView(this);
+        status.setText("مساعد الرحلات — فحص تجريبي");
+        status.setTextColor(Color.LTGRAY);
+        status.setPadding(0, dp(8), 0, dp(8));
+        box.addView(status);
+
+        Button scan = new Button(this);
+        scan.setText("فحص الشاشة");
+        scan.setOnClickListener(v -> {
+            if (!GameAccessibilityService.isConnected()) {
+                scanResult.setText("فعّل خدمة إمكانية الوصول أولاً");
+                return;
+            }
+            scanResult.setText(GameAccessibilityService.getScreenText());
+        });
+        box.addView(scan);
+
+        ScrollView scroll = new ScrollView(this);
+        scanResult = new TextView(this);
+        scanResult.setText("افتح شاشة الرحلات ثم اضغط فحص الشاشة");
+        scanResult.setTextColor(Color.WHITE);
+        scanResult.setTextSize(14);
+        scroll.addView(scanResult);
+        box.addView(scroll, new LinearLayout.LayoutParams(
+            -1, dp(150)
+        ));
+
+        Button test = new Button(this);
+        test.setText("اختبار اللمس");
+        test.setOnClickListener(v -> {
+            if (!GameAccessibilityService.isConnected()) {
+                Toast.makeText(this,
+                    "فعّل خدمة إمكانية الوصول أولاً",
+                    Toast.LENGTH_LONG).show();
+                return;
+            }
+            GameAccessibilityService.testTap();
+        });
+        box.addView(test);
+
+        Button close = new Button(this);
+        close.setText("إغلاق اللوحة");
+        close.setOnClickListener(v -> togglePanel());
+        box.addView(close);
+
+        Button hide = new Button(this);
+        hide.setText("إخفاء الدائرة");
+        hide.setOnClickListener(v -> stopSelf());
+        box.addView(hide);
+
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+            dp(270), WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        );
+        p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        p.y = dp(80);
+
+        panel = box;
+        wm.addView(panel, p);
     }
 
-    public static String getScreenText() {
-        if (instance != null) instance.scanScreen();
-        return screenText;
-    }
-
-    public static boolean isConnected() {
-        return instance != null;
-    }
-
-    public static void testTap() {
-        if (instance == null) return;
-
-        float x = instance.getResources()
-                .getDisplayMetrics().widthPixels / 2f;
-        float y = instance.getResources()
-                .getDisplayMetrics().heightPixels / 2f;
-
-        Path path = new Path();
-        path.moveTo(x, y);
-
-        GestureDescription gesture =
-                new GestureDescription.Builder()
-                        .addStroke(
-                                new GestureDescription.StrokeDescription(
-                                        path, 0, 100))
-                        .build();
-
-        instance.dispatchGesture(gesture, null, null);
-    }
-
-    @Override
-    public void onInterrupt() {
+    private int dp(int value) {
+        return (int) (value *
+            getResources().getDisplayMetrics().density + 0.5f);
     }
 
     @Override
     public void onDestroy() {
-        instance = null;
+        if (wm != null) {
+            if (panel != null) wm.removeView(panel);
+            if (bubble != null) wm.removeView(bubble);
+        }
         super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
     }
 }
