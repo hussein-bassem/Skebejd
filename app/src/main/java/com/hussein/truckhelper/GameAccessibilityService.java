@@ -1,4 +1,3 @@
-
 package com.hussein.truckhelper;
 
 import android.accessibilityservice.AccessibilityService;
@@ -8,28 +7,55 @@ import android.view.accessibility.AccessibilityEvent;
 
 public class GameAccessibilityService extends AccessibilityService {
 
+    private static GameAccessibilityService instance;
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        instance = this;
+    }
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // يستقبل أحداث إمكانية الوصول عند تفعيل الخدمة.
+        // لا ينفذ أي إجراء تلقائي عند استقبال الأحداث.
     }
 
     @Override
     public void onInterrupt() {
-        // إيقاف أي إجراء عند مقاطعة الخدمة.
     }
 
-    public void tap(float x, float y) {
+    public static boolean isConnected() {
+        return instance != null;
+    }
+
+    public static void testTap() {
+        if (instance == null) {
+            return;
+        }
+
+        float x = instance.getResources()
+            .getDisplayMetrics().widthPixels / 2f;
+        float y = instance.getResources()
+            .getDisplayMetrics().heightPixels / 2f;
+
         Path path = new Path();
         path.moveTo(x, y);
 
-        GestureDescription.StrokeDescription stroke =
-            new GestureDescription.StrokeDescription(path, 0, 100);
-
         GestureDescription gesture =
             new GestureDescription.Builder()
-                .addStroke(stroke)
+                .addStroke(
+                    new GestureDescription.StrokeDescription(
+                        path, 0, 100
+                    )
+                )
                 .build();
 
-        dispatchGesture(gesture, null, null);
+        instance.dispatchGesture(gesture, null, null);
+    }
+
+    @Override
+    public void onDestroy() {
+        instance = null;
+        super.onDestroy();
     }
 }
