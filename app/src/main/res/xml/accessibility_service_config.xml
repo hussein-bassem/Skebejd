@@ -3,4 +3,5 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:notificationTimeout="100"
     android:canPerformGestures="true"
-    android:accessibilityFlags="flagDefault" />
+    android:accessibilityFlags="flagDefault|flagReportViewIds"
+    android:canRetrieveWindowContent="true" />
